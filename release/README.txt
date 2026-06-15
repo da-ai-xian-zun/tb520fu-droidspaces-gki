@@ -3,7 +3,6 @@ TB520FU Droidspaces GKI — 镜像包（GitHub Release）
 
 型号: Lenovo TB520FU
 维护者系统: 国际版（ROW）ZUI 17.5.10.096 (UKQ1.240826.001) — 非国行系统
-Android 14, slot _a
 Bootloader: locked（不解锁）— 本包按此环境验证
 
 本 zip 含四个镜像（无刷机脚本，请自行用 9008 工具写入）:
@@ -132,12 +131,11 @@ init_boot AVB 指纹（核对用）
   示例: ...ZUI_17.5.10.096_251127_ROW...
 
 ---
-联想固件（9008 工具 / xbl，非本仓库托管）
+联想固件（非本仓库托管）
 ---
   https://mirrors.lolinet.com/firmware/lenowow/2024/Yoga_Tab_Plus_2025/TB520FU/
   与本包对应: TB520FU_ROW_OPEN_USER_Q00002.0_W_ZUI_17.5.10.096_ST_251127.zip
 
-国行 ZUI 用户请从联想国内渠道获取匹配固件，勿直接套用 ROW 包。
 
 ---
 Droidspaces 容器与 GPU
@@ -147,6 +145,3 @@ Droidspaces 容器与 GPU
   - GPU：Turnip 已测（FD750）；App 开 GPU Access、关 VirGL，
     环境变量 MESA_LOADER_DRIVER_OVERRIDE=kgsl（可选 TU_DEBUG=noconform）。
   - VirGL 未测试。
-
----
-源码: https://github.com/da-ai-xian-zun/tb520fu-droidspaces-gki
