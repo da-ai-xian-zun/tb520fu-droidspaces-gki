@@ -1,0 +1,47 @@
+# Build outputs / flash binaries (ship via GitHub Release only)
+*.img
+out/
+*.melf
+*.ext4
+*.sparse
+*.tar
+*.tar.xz
+*.zip
+*.gz
+config.gz
+config2.gz
+
+# Large vendor/stock dumps (keep locally, not in git)
+stock/
+backups/
+diag-*/
+
+# WSL / Bazel
+bazel-*
+out/
+
+# Windows junk
+Thumbs.db
+Desktop.ini
+*.log
+port_trace.txt
+
+# Secrets / local env
+tools/env.local
+.env
+*.pem
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# Package image dirs (binaries via GitHub Release)
+packages/*/image/*
+packages/*/rollback/*
+!packages/*/image/.gitkeep
+!packages/*/rollback/.gitkeep
+
+# MCP / agent tooling (not part of project)
+mcps/
+terminals/
