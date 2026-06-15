@@ -1,0 +1,34 @@
+TB520FU Droidspaces GKI — Third-Party Notices
+==============================================
+
+Four binary images per Release zip (no flash scripts).
+Source & build: repository README, docs/BUILD.md, docs/MANUAL_FLASH.md.
+
+---
+init_boot_a.img — SukiSU-Ultra patched
+  Project: https://github.com/SukiSU-Ultra/SukiSU-Ultra
+  Version: v4.1.3 (40796)
+  License: GNU General Public License v3.0 (GPL-3.0)
+  Based on Lenovo stock init_boot; see init_boot_a.metadata.txt for AVB props.
+  SukiSU source: https://github.com/SukiSU-Ultra/SukiSU-Ultra (tag matching your build)
+
+---
+Linux kernel (boot_a.img, modules in super_5.img)
+  License: GPL-2.0
+  Source:  https://android.googlesource.com/kernel/common/ tag android14-6.1.112_r00
+  Patches: patches/tb520fu-r13-droidspaces-minimal.diff + phase-2 defconfig fragment
+
+---
+Droidspaces-OSS (build-time kernel patch)
+  https://github.com/ravindu644/Droidspaces-OSS v6.3.0 — GPL-3.0
+
+---
+vbmeta.img
+  Device live backup (SukiSU hashtree-disabled). Not Lenovo stock 9008 vbmeta.
+
+---
+Lenovo firmware / 9008 tools — NOT in this zip
+  Obtain from Lenovo; docs link LOLINET mirror for ROW reference packages.
+  Maintainer system: ROW international ZUI (not 国行/CN ROM).
+
+DISCLAIMER: Flashing may brick devices. Use at your own risk.
