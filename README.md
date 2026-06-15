@@ -38,6 +38,19 @@
 
 **版本说明：** 本项目在维护者 **ROW 国际版** 系统上开发与验证（非国行 ZUXOS）。Release 中 `init_boot` 指纹为 `...ZUI_17.5.10.096_251127_ROW...`（见 `release/init_boot_a.metadata.txt`）。**若你使用国行 ZUX 或其他地区/版本**，刷前请核对构建号与 `verifiedbootstate`，必要时用本机 stock `init_boot` 重打 SukiSU。
 
+### 维护者验证环境（重要）
+
+| 项 | 值 |
+|------|-----|
+| Bootloader | **不解锁（locked）** |
+| 刷写方式 | **9008 四镜像**（见 [`MANUAL_FLASH.md`](docs/MANUAL_FLASH.md)） |
+| 验证系统 | 仅 **ZUI 17.5.10.096 ROW** `UKQ1.240826.001` |
+| AVB | Release 内 `init_boot` / `vbmeta` 绑定维护者本机 AVB 链；**其他小版本或国行勿直接套用整包** |
+
+**不解锁 BL 时：** locked 设备无法用 fastbootd 写入 `system_dlkm`，因此本 Release 走 9008 一次写入 `init_boot_a` + `boot_a` + `super_5` + `vbmeta_a`。bundled `init_boot`/`vbmeta` 必须与你的 ZUI 小版本、地区匹配，否则可能无法过校验或无法启动。
+
+**已解锁 BL 时：** 可自行用 fastboot 刷 `boot_a` + `super_5`（及自备 `init_boot`/vbmeta），对 bundled AVB 快照的版本绑定**较宽松**；但仍须保证 `boot` 与 `system_dlkm` 配套。详见 Release 包内 `README.txt`。
+
 ### 联想原厂固件
 
 本仓库不分发联想 ROM。第三方镜像：
@@ -66,6 +79,17 @@ source tools/env.local
 bash tools/build_tb520fu_droidspaces_phase2.sh
 bash tools/pack_release_zip.sh phase2
 ```
+
+---
+
+## Droidspaces 使用说明
+
+| 项 | 状态 |
+|------|------|
+| `droidspaces check` | 通过 |
+| 容器安装 | 请用 **目录模式**；App **sparse** 安装未解决 |
+| GPU 加速 | **Turnip** 已测（Adreno FD750，`glxgears` ~95 FPS）；需 App 开 GPU Access、关 VirGL，容器环境变量 `MESA_LOADER_DRIVER_OVERRIDE=kgsl` |
+| VirGL | **未测试**（高通机推荐 Turnip，见 [Droidspaces 图形指南](https://github.com/ravindu644/Droidspaces-OSS/blob/main/Documentation/Graphics-and-Audio.md)） |
 
 ---
 
