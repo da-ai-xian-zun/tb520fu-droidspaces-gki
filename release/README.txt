@@ -21,21 +21,67 @@ Bootloader: locked（不解锁）— 本包按此环境验证
 维护者路径：不解锁 BL + 9008 四镜像
 ---
 
-本 Release 在 **bootloader 保持 locked** 的前提下验证通过。
+本 Release 在 bootloader 保持 locked 的前提下验证通过。
+locked 设备无法用 fastbootd 写入 system_dlkm，因此须走 9008（EDL），
+在一次 fh_loader 会话内写完下列四个目标后 reset，不可分次只刷其中一部分。
 
-原因：locked 设备上 fastbootd 无法写入 system_dlkm（会触发 resize 被拒绝），
-因此必须用 9008 写入 super_5（system_dlkm 切片）及 boot / init_boot / vbmeta。
+---
+刷机概要
+---
 
-刷机概要（一次会话写完四个分区再 reset）:
+【本 zip 含什么】四个 .img，无刷机脚本、无 rawprogram XML。
+  完整图文步骤见源码仓库:
+  https://github.com/da-ai-xian-zun/tb520fu-droidspaces-gki/blob/main/docs/MANUAL_FLASH.md
 
-  init_boot_a  +  boot_a  +  super_5 (system_dlkm)  +  vbmeta_a
+【你还须自备】联想 ROW 原厂包解压后的 9008 工具（本 zip 不含）:
+  QSaharaServer.exe, fh_loader.exe, image/xbl_s_devprg_ns.melf
+  推荐固件包: TB520FU_ROW_OPEN_USER_Q00002.0_W_ZUI_17.5.10.096_ST_251127.zip
+  （见下文「联想固件」链接）
 
-分区表: 源码仓库 docs/MANUAL_FLASH.md
-四分区 XML: packages/triplet-phase2/rawprogram_release_quad.xml
-（init_boot: LUN4 start_sector=340102, 2048 sectors）
+【镜像文件 -> 写入目标】（slot _a）
 
-fh_loader 必须加: --memoryname=UFS
-不要只刷 boot；不要刷 vendor_boot / userdata / 全量 super。
+  zip 内文件          写入分区/位置              大小
+  ----------------    ------------------------  ----------
+  init_boot_a.img  -> init_boot_a  (LUN4)       8 MiB
+  boot_a.img       -> boot_a       (LUN4)       96 MiB
+  super_5.img      -> super 内 system_dlkm 切片 (LUN0)  ~11.6 MiB
+  vbmeta.img       -> vbmeta_a     (LUN4)       64 KiB (65536 B)
+
+  注意: super_5.img 是 system_dlkm 的 super 切片，不是名为 super_5 的独立分区。
+  vbmeta.img 须写满 65536 B；勿用原厂 9008 包里 8192 B 的 stock vbmeta 替代。
+
+【扇区参数】（fh_loader / 自写 XML 时用；扇区大小 4096 B）
+
+  init_boot_a:  LUN=4, start_sector=340102,  sectors=2048
+  boot_a:       LUN=4, start_sector=112006,  sectors=24576
+  super_5:      LUN=0, start_sector=3055240, sectors=2976
+  vbmeta_a:     LUN=4, start_sector=136634,  sectors=16
+
+【rawprogram XML】本 Release zip 不含 XML。
+  可从源码仓库获取四分区模板（须与上述四个 .img 同目录）:
+  https://github.com/da-ai-xian-zun/tb520fu-droidspaces-gki/blob/main/packages/triplet-phase2/rawprogram_release_quad.xml
+  将 zip 内四个 .img 与 XML 放同一英文路径，search_path 指向该目录。
+
+【推荐流程】
+
+  1. 校验 zip: sha256sum -c SHA256SUMS.txt
+  2. 四镜像放到同一英文路径（路径勿含中文）
+  3. 平板进 EDL: adb reboot edl（或按键进 9008）
+  4. Sahara 加载 xbl_s_devprg_ns.melf
+  5. fh_loader 一次会话写入四个分区，参数须含:
+       --memoryname=UFS
+       --reset
+     （具体命令示例见 MANUAL_FLASH.md）
+  6. 开机后检查:
+       adb shell getprop sys.boot_completed
+       adb shell getprop ro.boot.verifiedbootstate
+       adb shell su -c droidspaces check
+
+【禁止】
+
+  - 不要只刷 boot_a（须与 super_5、vbmeta 等同次写完）
+  - 不要刷 vendor_boot、dtbo、userdata、全量 super
+  - 不要在一次会话里漏写 super_5 或 vbmeta（会半改坏）
 
 ---
 系统版本要求（不解锁 BL 时必读）
