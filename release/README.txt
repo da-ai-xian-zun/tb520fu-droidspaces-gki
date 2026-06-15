@@ -18,15 +18,56 @@ Bootloader: locked（不解锁）— 本包按此环境验证
 校验: sha256sum -c SHA256SUMS.txt
 
 ---
-维护者路径：不解锁 BL + 9008 四镜像
+Bootloader：不解锁 vs 已解锁（请先读）
 ---
 
-本 Release 在 bootloader 保持 locked 的前提下验证通过。
-locked 设备无法用 fastbootd 写入 system_dlkm，因此须走 9008（EDL），
-在一次 fh_loader 会话内写完下列四个目标后 reset，不可分次只刷其中一部分。
+本 Release 在「bootloader 保持 locked、不清 userdata」的前提下验证通过。
+请先确认自己属于哪一种，再决定刷哪些镜像、版本要求有多严。
+
+【情况 A — bootloader 未解锁（locked）← 维护者路径，本 zip 主要面向此情况】
+
+  为什么必须 9008:
+    locked 设备上 fastbootd 写 system_dlkm 会走 resize，被策略拒绝，
+    无法用 fastboot 单独替换 system_dlkm。只能走 9008 写 super 内切片。
+
+  须刷什么:
+    一次 9008 会话内写完四个目标后 reset，不可只刷 boot:
+      init_boot_a + boot_a + super_5 (system_dlkm) + vbmeta_a
+
+  版本 / AVB 要求（严）:
+    仅在与维护者相同 ZUI 小版本验证:
+      ZUI 17.5.10.096 (ROW)，UKQ1.240826.001
+    本 zip 内 init_boot / vbmeta 为维护者本机 AVB 链快照。
+    其他 ROW 小版本、国行或其他地区: 勿直接套用整包四镜像。
+    刷后查: adb shell getprop ro.boot.verifiedbootstate
+    不匹配时: 用本机 stock init_boot 重打 SukiSU + 自备 live vbmeta；
+              或仅刷 boot_a + super_5，init_boot / vbmeta 用本机版本。
+
+【情况 B — bootloader 已解锁（unlocked）】
+
+  刷写方式:
+    可用 fastboot / fastbootd，不必依赖 9008（9008 仍可用）。
+
+  须刷什么（灵活）:
+    至少 boot_a + 配套 system_dlkm（本 zip 的 super_5.img）必须成套。
+    init_boot / vbmeta 可不使用本 zip 内文件，建议自备与本机匹配的版本。
+
+  版本 / AVB 要求（松）:
+    bundled init_boot / vbmeta 的版本绑定不再那么关键；
+    你可自行重打 SukiSU、从本机备份 vbmeta。
+    但 boot 与 system_dlkm 仍须同次构建、配套，否则可能二屏或模块链异常。
+
+【对照】
+
+  项目              locked（不解锁）          unlocked（已解锁）
+  ----------------  ------------------------  ---------------------------
+  推荐刷法          9008 四镜像               fastboot 或 9008
+  本 zip 四镜像     建议整包同次写入          至少 boot + super_5；init_boot/vbmeta 可自备
+  init_boot/vbmeta  须匹配 ZUI 小版本/AVB     可自备，限制较宽松
+  维护者是否验证    是                        未单独验证 fastboot 路径
 
 ---
-刷机概要
+刷机概要（情况 A：不解锁 BL，9008 四镜像）
 ---
 
 【本 zip 含什么】四个 .img，无刷机脚本、无 rawprogram XML。
@@ -84,29 +125,15 @@ locked 设备无法用 fastbootd 写入 system_dlkm，因此须走 9008（EDL）
   - 不要在一次会话里漏写 super_5 或 vbmeta（会半改坏）
 
 ---
-系统版本要求（不解锁 BL 时必读）
+init_boot AVB 指纹（核对用）
 ---
 
-本包仅在与维护者相同的 ZUI 小版本上验证：
+  见 init_boot_a.metadata.txt
+  示例: ...ZUI_17.5.10.096_251127_ROW...
 
-  ZUI 17.5.10.096 (ROW)
-  构建号 UKQ1.240826.001
-  init_boot AVB 指纹含 ZUI_17.5.10.096_251127_ROW（见 init_boot_a.metadata.txt）
-
-Release 内 init_boot / vbmeta 绑定维护者本机的 AVB 链快照。
-
-  - 其他 ROW 小版本（OTA 后构建号不同）、国行或其他地区：勿直接套用整包四镜像。
-  - 刷后请查: adb shell getprop ro.boot.verifiedbootstate
-  - 不匹配时：用本机 stock init_boot 重打 SukiSU，并从本机 live 备份生成 vbmeta
-    （hashtree-disabled）；或只刷 boot_a + super_5，自备 init_boot / vbmeta。
-
-若 bootloader 已解锁：
-
-  - 可自行 fastboot / fastbootd 刷写，对 bundled AVB 版本绑定较宽松。
-  - 仍建议自备与本机匹配的 init_boot / vbmeta；boot 与 system_dlkm 必须配套。
-  - 9008 四镜像路径并非唯一，但仍是 locked 设备的可行方案。
-
-联想固件（9008 工具 / xbl，非本仓库托管）:
+---
+联想固件（9008 工具 / xbl，非本仓库托管）
+---
   https://mirrors.lolinet.com/firmware/lenowow/2024/Yoga_Tab_Plus_2025/TB520FU/
   与本包对应: TB520FU_ROW_OPEN_USER_Q00002.0_W_ZUI_17.5.10.096_ST_251127.zip
 
