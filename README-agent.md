@@ -67,6 +67,10 @@ Release 四镜像：
 
 **必须** `fh_loader --memoryname=UFS`。三/四镜像须同次写完；**只刷 boot** 会半改坏。
 
+**版本/AVB（locked 路径）**：仅 **ZUI 17.5.10.096 ROW** 验证；bundled `init_boot`/`vbmeta` 绑定维护者 AVB 链，其他小版本/国行勿直接套用整包。
+
+**已解锁 BL**：可 fastboot 刷写，AVB 版本绑定较宽松；自备 `init_boot`/vbmeta 更稳妥。见 `release/README.txt`、`docs/MANUAL_FLASH.md`。
+
 ### 3.2 不可再做的低价值动作
 
 见 `docs/TB520FU-Droidspaces-后续研究方向交接.md` §0：单独刷 boot、社区 OKI 通用包、旧 6.1.68 联想包等。
@@ -80,7 +84,12 @@ Release 四镜像：
 phase-2 `max_loop=64` 已刷入，App `SparseImageInstaller` 的 sparse/rootfs.img 安装**仍失败**。  
 **明确归因：本项目尚未研究清楚**（非简单说上游必然如此）。可能与 APEX ~47/64 loop 占用、App `mount -o loop` 实现有关。
 
-**规避**：安装容器用 **目录模式**，不要用 sparse/image 模式。  
+**规避**：安装容器用 **目录模式**，不要用 sparse/image 模式。
+
+### 3.5 Droidspaces GPU
+
+- **Turnip**：已测（FD750，`glxgears` ~95 FPS）；GPU Access 开、VirGL 关、`MESA_LOADER_DRIVER_OVERRIDE=kgsl`。
+- **VirGL**：未测试。
 记录：交接 §5.18、`docs/MANUAL_FLASH.md` §6。
 
 ---
