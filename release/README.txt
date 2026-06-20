@@ -141,7 +141,12 @@ init_boot AVB 指纹（核对用）
 Droidspaces 容器与 GPU
 ---
 
-  - 容器请用「目录模式」安装；App sparse 镜像安装未解决。
+  - 联想 TB520FU 现阶段正常（2026-06-20，HA2452JQ）：
+    debian-cli 已迁 32G sparse + loopfix CLI；魔改 APK 手装 sparse +
+    full_apk_sparse_install_e2e.sh / post_apk_e2e_check.sh 均已验 PASS。
+  - stock APK 的 Sparse Image 新建仍不可用（busybox mount -o loop；跨机型复现，非 SELinux）。
+    新建容器请用 GitHub Release v1.0.1 的魔改 APK、CLI migrate，或目录模式。
+    见 release/APK-README.txt · docs/SPARSE-MOUNT-RESEARCH.md §5.4.1–§5.4.2。
   - GPU：Turnip 已测（FD750）；App 开 GPU Access、关 VirGL，
     环境变量 MESA_LOADER_DRIVER_OVERRIDE=kgsl（可选 TU_DEBUG=noconform）。
   - VirGL 未测试。

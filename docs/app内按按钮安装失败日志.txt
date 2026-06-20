@@ -1,0 +1,42 @@
+Starting container installation...
+Container: sb
+Hostname: sb
+Tarball: Debian-GNU-Linux-13-Trixie-Minimal-Droidspaces-developers-aarch64-20260615-385f0403.tar.xz
+Checking available storage space...
+/data partition has 315GB free space
+Creating container directory: /data/local/Droidspaces/Containers/sb
+Copying tarball to temporary location...
+Tarball copied: /data/user/0/com.droidspaces.app/cache/container_sb.tar.xz
+[SPARSE] Creating sparse image: 4GB
+[SPARSE] Formatting sparse image as ext4...
+Discarding device blocks:       0/1048576               done                            
+Creating filesystem with 1048576 4k blocks and 262144 inodes
+Filesystem UUID: d2ff3f7f-4eed-4dae-9c84-bd9c8c04be47
+Superblock backups stored on blocks: 
+	32768, 98304, 163840, 229376, 294912, 819200, 884736
+Allocating group tables:  0/32     done                            
+Writing inode tables:  0/32     done                            
+Creating journal (16384 blocks): done
+Writing superblocks and filesystem accounting information:  0/32     done
+[SPARSE] Reclaiming reserved disk space (tune2fs -m 0)...
+tune2fs 1.46.6 (1-Feb-2023)
+Setting reserved blocks percentage to 0% (0 blocks)
+[SPARSE] Verifying filesystem integrity (e2fsck)...
+[SPARSE] Filesystem integrity verified (code 0)
+[SPARSE] Waiting for filesystem to settle (2.5s)...
+[SPARSE] Creating mount point: /data/local/Droidspaces/Containers/sb/rootfs
+[SPARSE] Applying SELinux context (vold_data_file)...
+[SPARSE] Mounting sparse image (Minimal loop,rw)...
+[SPARSE] Error: Failed to mount sparse image. Your kernel might not support loop mounts here.
+Installation failed: Failed to mount sparse image. Your kernel might not support loop mounts here.
+java.lang.Exception: Failed to mount sparse image. Your kernel might not support loop mounts here.
+	at f2.q3.invokeSuspend(Unknown Source:1236)
+	at m3.a.resumeWith(Unknown Source:8)
+	at b4.l0.run(Unknown Source:114)
+	at l.k.run(Unknown Source:13)
+	at h4.i.run(Unknown Source:2)
+	at h4.a.run(Unknown Source:91)
+
+Cleaning up created files...
+Cleaned up: /data/local/Droidspaces/Containers/sb
+Installation failed: Failed to mount sparse image. Your kernel might not support loop mounts here.

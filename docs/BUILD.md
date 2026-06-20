@@ -64,6 +64,20 @@ bash tools/pack_release_zip.sh phase2
 
 ---
 
-## 6. 已知：sparse 容器安装未解决
+## 6. 稀疏挂载与魔改 APK
 
-构建/刷机成功后，Droidspaces **目录模式**可装容器；**sparse 模式**在 TB520FU 上仍失败，原因未完全弄清。见 [`MANUAL_FLASH.md`](MANUAL_FLASH.md) §5。
+构建/刷机成功后：**联想 TB520FU 现阶段 Droidspaces 正常**（`debian-cli` = CLI 迁移 + loopfix，32G，`apt` 约 −69%）。**stock APK** Sparse 新建仍不可用（busybox，§5.5）；本仓库 **魔改 APK** 在 TB520FU **手装 + 完整安装 E2E + 3×启停** ✅（§5.4.1–§5.4.2）：
+
+```powershell
+bash tools/build_droidspaces_loopfix.sh   # WSL：先编 loopfix CLI
+powershell -File tools/build_droidspaces_apk_loopfix.ps1   # 含 asset *.sh LF 门禁
+powershell -File tools/verify_apk_loopfix.ps1              # 含 APK 内 CRLF 扫描
+```
+
+产物：`output/droidspaces-apk-loopfix/Droidspaces-loopfix-debug.apk`（debug 签名，须卸 stock App；当次 SHA256 见 `SHA256SUMS`）。**勿**在 Windows 直接保存 CRLF 的 `mount_loop_scan.sh` / `sparsemgr.sh`。
+
+**刷机/装 APK 后（必做）**：核对并部署 CLI——魔改 APK 捆绑 loopfix，但设备若已有 **同体积 410168 B 旧 loopfix**，覆盖安装可能不替换二进制；`apply-loopfix.sh` 也只按体积恢复，**不能**旧→新升级。见 `patches/README.md`「装 APK 后必查 CLI 指纹」；一加 PKR110 必跑 `install_loopfix_persistent.sh`。
+
+装后验证：`tools/post_apk_e2e_check.sh`（启停+网络）、`tools/full_apk_sparse_install_e2e.sh`（从零模拟 App 安装）、`tools/oneplus_fresh_cycle.sh`（一加：官方 rootfs 全新安装→压测→清理）。**一加** 魔改 APK + 新 CLI ✅（`ONEPLUS-PKR110-COMMUNITY-KERNEL-交接.md` §6）。
+
+专档：[`SPARSE-MOUNT-RESEARCH.md`](SPARSE-MOUNT-RESEARCH.md)；上游草稿：[`UPSTREAM-ISSUE-DRAFT.md`](UPSTREAM-ISSUE-DRAFT.md)；刷机后见 [`MANUAL_FLASH.md`](MANUAL_FLASH.md) §6。

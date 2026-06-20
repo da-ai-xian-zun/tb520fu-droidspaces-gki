@@ -13,7 +13,7 @@
 | system | **国际版（ROW）** ZUI — 维护者实机，**非国行系统** |
 | soc | Qualcomm SM8650（pineapple / lapis） |
 | tested_build | ZUI **17.5.10.096** `UKQ1.240826.001` |
-| android | 14 |
+| android | **16**（SDK 36；GKI 版本串仍含 `android14-6.1`） |
 | slot | `_a` |
 | bl | **locked** |
 | root | SukiSU on **`init_boot_a`** — **随 GitHub Release 分发** v4.1.3/40796 |
@@ -79,18 +79,65 @@ Release 四镜像：
 
 早期「只换 boot 不换 system_dlkm」会导致 GKI protected modules 断裂、二屏卡住。默认解释已是 **boot + system_dlkm 成套**；见交接 §5.10–5.11。
 
-### 3.4 Droidspaces sparse 安装（**本项目未解决**）
+### 3.4 Droidspaces sparse 挂载（**分层结论，2026-06-21**）
 
-phase-2 `max_loop=64` 已刷入，App `SparseImageInstaller` 的 sparse/rootfs.img 安装**仍失败**。  
-**明确归因：本项目尚未研究清楚**（非简单说上游必然如此）。可能与 APEX ~47/64 loop 占用、App `mount -o loop` 实现有关。
+专档：[`docs/SPARSE-MOUNT-RESEARCH.md`](docs/SPARSE-MOUNT-RESEARCH.md) · 上游草稿：[`docs/UPSTREAM-ISSUE-DRAFT.md`](docs/UPSTREAM-ISSUE-DRAFT.md) · 交接 §5.21–§5.22
 
-**规避**：安装容器用 **目录模式**，不要用 sparse/image 模式。
+**现状**
+
+| 项 | 状态 |
+|----|------|
+| `debian-cli` | 已迁 **32G sparse**（CLI `--rootfs-img` + **loopfix**）；`apt update` 约 **−69%** |
+| App **Sparse Image 新建** | **stock APK** ❌（跨 3 OEM）；**魔改 APK** ✅ **联想现阶段正常**（手装 + `full_apk_sparse_install_e2e.sh` + `post_apk_e2e_check.sh` PASS，§5.4.1–§5.4.2 / §5.24）；跨机型 ⏳ |
+| `debian13` | 目录模式（11G），未迁 |
+| `droidspaces check` | ✅（TB520FU phase-2） |
+
+**根因分层**（勿混为一谈）
+
+1. **联想原厂 loop 池偏紧**：`max_loop=48` + APEX≈47 → 零余量；phase-2 `max_loop=64` 已缓解（~16 空闲）。
+2. **phase-2 自编 GKI**：**非** loop 编译问题；显式 `losetup loop48+` + `mount` 成功。
+3. **Droidspaces 上游缺口**：App 硬编码 `.../Droidspaces/bin/busybox mount -o loop`，自动 losetup 在 loop 高占用机上不可靠（`SparseImageInstaller.kt`）。
+4. **stock CLI 脏池**：`ioctl(LOOP_CTL_GET_FREE)` 多轮 stop/start 后可能 `LOOP_SET_FD: Resource busy`；**loopfix**（`patches/droidspaces-android-loop-scan.patch`）扫描高 minor，**8–20 轮停启无需 reboot**。
+5. **已排除**：KernelSU `magic_mount_rs`（模块逐一隔离后仍失败）；**SELinux**（TB520FU / 小米 / 一加 `setenforce 0` 后 busybox **仍**失败，toybox 成功）；**联想独家**（见跨机型表）。
+
+**跨机型 Droidspaces v6.3.0 自带 busybox**（方案 A，原厂系统，2026-06-21）
+
+| 设备 | DS busybox | toybox | `droidspaces check` |
+|------|------------|--------|---------------------|
+| TB520FU phase-2 | ❌ `can't setup loop device` | ✅（干净重启后） | ✅ |
+| 小米 12S Ultra thor | ❌ **同上** | ✅ | ❌ 缺 PID/IPC ns |
+| 一加 Ace 5 Pro PKR110（原厂） | ❌ **同上** | ✅ | ❌ 缺 PID/IPC ns |
+| 一加 PKR110（`6.6.89-Gold_bug`） | ❌ 仍失败 | ✅ | ✅ · **#9 10/10** stock CLI |
+| Pixel 8 shiba | —（未装 DS） | ✅ 近满池仍 OK | — |
+
+小米上 `/data/adb/ksu/bin/busybox` 可成功，但 App 安装器**不用**该路径。
+
+**loopfix 指纹（TB520FU，当前部署）**：stock **461544 B** `3538a2b7…` · loopfix **410168 B** `e0a80f9c…3b5c4584d`
+
+**规避 / 日常**
+
+- **新建**容器：**魔改 APK**（`build_droidspaces_apk_loopfix.ps1`）、CLI + `migrate_debian_cli_sparse.sh`，或目录模式；**stock APK** 勿 Sparse 新建。
+- App 升级可能覆盖 `droidspaces` 为 stock → `apply-loopfix.sh` 或 `install_loopfix_persistent.sh`。
+- **装魔改 APK 后必查 CLI SHA256**（不能只看 410168 B）：两版 loopfix 同体积时 `apply-loopfix` 不升级；一加曾需多传一次 `install_loopfix_persistent.sh`（`849250a4…` → `e0a80f9c…`）。CLI 补丁**仅** `mount.c`；见 `patches/README.md`。
+- stock CLI 报 `LOOP_SET_FD` → 确认 loopfix 体积，或 **reboot** 再 start。
+- 小米 thor：社区表**无** `2203121C` 内核条目；一加 PKR110 已刷 `Gold_bug`，线 2 完成（见 `ONEPLUS-PKR110-COMMUNITY-KERNEL-交接.md`）。
+
+**诊断**：`sparse_cli_app_compare.sh`、`sparse_oem_loop_smoke.sh`、`sparse_selinux_loop_test.sh`、`diag_magic_mount_readonly.sh`
 
 ### 3.5 Droidspaces GPU
 
 - **Turnip**：已测（FD750，`glxgears` ~95 FPS）；GPU Access 开、VirGL 关、`MESA_LOADER_DRIVER_OVERRIDE=kgsl`。
 - **VirGL**：未测试。
 记录：交接 §5.18、`docs/MANUAL_FLASH.md` §6。
+
+### 3.6 NetProxy + `debian-cli`（NAT）— 已联调（2026-06-18）
+
+- **宿主代理**：[NetProxy-Magisk](https://github.com/Fanju6/NetProxy-Magisk) TPROXY；须在 **KernelSU Ultra / NetProxy 管理器** 开启后重启，勿仅用 `cli service start`。
+- **bypass**：`tproxy.conf` 设 `OTHER_BYPASS_INTERFACES="ds-br0"`（脚本 `tools/netproxy_bypass_droidspaces.sh`）；`BYPASS_IPv4_LIST` 可显式加 `172.28.0.0/16`。
+- **验证**：NetProxy 运行时宿主 `github.com` → `198.18.x.x`；`debian-cli`（NAT）→ 真实 IP；`iptables` `BYPASS_INTERFACE` 含 `ds-br0`。
+- **容器**：`debian13`=host（anland，受代理）；`debian-cli`=nat `172.28.1.2`（CLI 开发）；重启后 `debian-cli` 需手动 start（`run_at_boot=0`）。
+- **内置终端虚拟键**：Droidspaces v6.3.0 **无隐藏开关**（源码写死两排 VirtualKeys）；用 **Copy Login + Termux**，Termux 侧 `extra-keys = []`。
+- 详见交接 **§5.20**；诊断 `tools/post_reboot_check.sh`、`tools/diag_netproxy_droidspaces.sh`。
 
 ---
 
@@ -102,7 +149,12 @@ tb520fu-droidspaces-gki/
   LICENSE (MIT 脚本) / docs/COMPLIANCE.md
   docs/BUILD.md / docs/MANUAL_FLASH.md
   docs/TB520FU-Droidspaces-*.md     # 完整交接与技术笔记
+  docs/SPARSE-MOUNT-RESEARCH.md     # 稀疏挂载专档（§5.21）
+  docs/UPSTREAM-ISSUE-DRAFT.md      # 上游 issue/PR 草稿
   patches/tb520fu-r13-droidspaces-minimal.diff
+  patches/droidspaces-android-loop-scan.patch
+  patches/sparsemgr-loop-scan.patch
+  patches/sparseimageinstaller-loop-scan.patch
   release/                          # Release 文本模板（打进 zip，非 Git 镜像）
   tools/
     env.example → env.local
@@ -112,6 +164,14 @@ tb520fu-droidspaces-gki/
     pack_release_zip.sh
     pack_tb520fu_droidspaces_phase2_triplet.sh
     verify_repo.sh
+    netproxy_bypass_droidspaces.sh   # NetProxy bypass ds-br0（§5.20）
+    setup_debian_cli_nat.sh
+    post_reboot_check.sh / diag_netproxy_droidspaces.sh
+    migrate_debian_cli_sparse.sh   # 目录 → sparse 生产迁移
+    build_droidspaces_loopfix.sh / deploy_droidspaces_loopfix.sh
+    build_droidspaces_apk_loopfix.ps1 / verify_apk_loopfix.ps1
+    sparse_cli_app_compare.sh / sparse_oem_loop_smoke.sh / sparse_selinux_loop_test.sh
+    sparse_issue_bundle.sh / xiaomi_scheme_a_install.sh
   packages/
     triplet-phase2/
       rawprogram_release_quad.xml   # 四分区参考
@@ -205,12 +265,17 @@ Sahara 建议：`-k -t 30`。刷机包路径用 **纯 ASCII**。
 | § | 内容 |
 |---|------|
 | §0 | 禁止重复的低价值实验 |
-| §4 | 当前建议路线 |
+| §4 | 研究方案总览（2026-06-20） |
 | §5.10–5.11 | system_dlkm 配套根因 |
 | §5.14 | 构建规格 |
 | §5.15–5.16 | minimal 刷入与 sparse 失败 |
 | §5.17 | phase-2 编译打包 |
 | §5.18 | phase-2 刷入后 sparse 仍失败（根因重判） |
+| §5.19 | 排除 magic_mount_rs；adb loop 烟雾测试；剩余方向 |
+| §5.20 | NetProxy-Magisk + Droidspaces NAT bypass；`debian-cli`；内置终端虚拟键 |
+| §5.21 | 稀疏挂载研究摘要（**专档** [`docs/SPARSE-MOUNT-RESEARCH.md`](docs/SPARSE-MOUNT-RESEARCH.md)） |
+| §5.22 | 跨机型 busybox + SELinux 证伪；stock/loopfix 指纹；issue 前置收尾 |
+| §5.23–§5.24 | 魔改 APK（双 App 补丁）TB520FU 安装+启停 E2E；CRLF/安装器踩坑；跨机型待测 |
 
 ---
 
@@ -239,8 +304,14 @@ export BASE9008_DIR=...        # 可选：本地 dev 包 xbl
 
 ## 11. 待办 / 可选下一步
 
-1. **sparse 容器安装**：本项目未解决；用户侧用目录模式
-2. 国行 ZUI 用户兼容性 — 未在国行系统上验证；需自备匹配固件/init_boot
-3. 向 Droidspaces-OSS 提 issue：安装器改用 `ioctl(LOOP_CTL_GET_FREE)` 而非 `mount -o loop`
-4. phase-3：`max_loop=128`（不保证修 sparse）
-5. 接手 agent：跑 `verify_repo.sh` + `test_phase2_config.sh`，对照实机再改文档
+**稀疏挂载（§5.21–§5.24）**：联想 TB520FU **现阶段正常** ✅ — `debian-cli` 32G sparse + loopfix；魔改 APK 手装 + 完整安装 E2E + 3×启停均 PASS（§5.4.2 CRLF、先写 config 再 umount）；跨机型 busybox / SELinux 证伪 ✅；**一加线 2 ✅**（#9 stock 10/10）；魔改 APK 跨机型 ⏳；issue 清单剩 **thor #9**。
+
+1. **稀疏日常化**（P1）：确认 `debian-cli` 稳定后删 `rootfs.dir.bak`；App 升级后跑 `apply-loopfix.sh`
+2. **上游 issue/PR**（P2）：草稿 [`docs/UPSTREAM-ISSUE-DRAFT.md`](docs/UPSTREAM-ISSUE-DRAFT.md) — CLI PR 优先，App 路径附 `sparsemgr-loop-scan.patch`；**用户确认后再 push**
+3. **`debian-cli` 内网开发链**（P1）：EasyTier + 容器内 sing-box → Gitea — §5.20
+4. **I/O 并行缓解**（P1）：tmpfs 挂 apt 缓存与编译目录；无 SD 槽见 §4.4
+5. **#9 stock CLI 脏池**：一加线 2 ✅；**thor** 仍待社区 GKI 内核；魔改 APK 跨机型 ⏳
+6. 社区设备表 TB520FU Partial 备注更新（本地，非阻塞）
+7. 国行 ZUI 兼容性 — 未验证；需自备匹配固件/init_boot
+8. phase-3：`max_loop=128`（低优先级；**不保证**修 App busybox）
+9. 接手 agent：`verify_repo.sh` + `test_phase2_config.sh`；sparse：`sparse_cli_app_compare.sh`、`sparse_issue_bundle.sh`

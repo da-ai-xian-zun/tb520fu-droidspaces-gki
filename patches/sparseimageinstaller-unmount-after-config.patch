@@ -1,0 +1,19 @@
+diff --git a/Android/app/src/main/java/com/droidspaces/app/util/ContainerInstaller.kt b/Android/app/src/main/java/com/droidspaces/app/util/ContainerInstaller.kt
+index 21b7831..d783313 100644
+--- a/Android/app/src/main/java/com/droidspaces/app/util/ContainerInstaller.kt
++++ b/Android/app/src/main/java/com/droidspaces/app/util/ContainerInstaller.kt
+@@ -150,6 +150,14 @@ object ContainerInstaller {
+             logger.i("Container configuration saved")
+             createdPaths.add(configFilePath)
+ 
++            if (config.useSparseImage) {
++                SparseImageInstaller.unmountSparseImage(
++                    mountPoint = "$containerPath/rootfs",
++                    imgPath = rootfsPath,
++                    logger = logger
++                )
++            }
++
+             // Step 5.1: Write .env file if content exists
+             if (!config.envFileContent.isNullOrBlank()) {
+                 logger.i("Writing environment variables (.env)...")

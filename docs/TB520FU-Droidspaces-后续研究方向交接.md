@@ -1,9 +1,10 @@
 ﻿# TB520FU Droidspaces/GKI 后续研究方向交接
 
 > 目标读者：接手研究的 agent。  
-> 当前日期：2026-06-15
+> 当前日期：2026-06-21
 > 设备：Lenovo TB520FU / Yoga Tab Plus，Qualcomm SM8650，平台名出现 `pineapple/lapis`。  
-> 当前安全状态：已回滚 stock `boot_a`，设备正常启动，slot `_a`，userdata 未清。
+> **Droidspaces 现阶段（2026-06-20，HA2452JQ）**：联想 TB520FU **正常可用** — phase-2 GKI + loopfix CLI + 魔改 APK；`debian-cli` / `debian13` 保留；测试容器已删。  
+> 设备：slot `_a`，userdata 未清。
 
 ### GitHub 发布仓库（2026-06-15 更新）
 
@@ -12,7 +13,8 @@
 - **GitHub Release**：`tb520fu-droidspaces-phase2-images.zip` — **四镜像**（`init_boot_a` SukiSU + 三件套）+ README，无脚本
 - **联想固件**：维护者用 LOLINET ROW 包；国行 ZUI 用户自备国内渠道固件，未在国行上验证
 - **不进 Release**：xbl/9008 工具、脚本、stock ROM
-- **未解决（本仓库）**：Droidspaces sparse 容器安装失败 → 目录模式规避；见 §5.18
+- **稀疏挂载（2026-06-20）**：联想 TB520FU **现阶段正常** ✅ — `debian-cli` 32G sparse + loopfix；**stock APK** Sparse 新建仍失败（跨 3 OEM）；**魔改 APK** 手装 + 完整安装 E2E + 3×启停均 PASS（§5.23–§5.24）；一加线 2 ✅；上游草稿 [`UPSTREAM-ISSUE-DRAFT.md`](UPSTREAM-ISSUE-DRAFT.md)
+- **已联调（2026-06-18）**：NetProxy-Magisk + `debian-cli` NAT bypass；见 §5.20
 - 许可研究见 `docs/COMPLIANCE.md`
 
 ## 0. 当前不可再重复的低价值动作
@@ -244,19 +246,86 @@ D:\project\新建文件夹\tb520fu-no-su-modules-off-stamped-diag-20260614-01552
 D:\project\新建文件夹\tb520fu-stamped-vanilla-second-screen-diag-20260613-192643
 ```
 
-## 4. 当前建议（2026-06-15 更新）
+## 4. 研究方案总览（2026-06-20 更新）
 
-**已证实可行路径**：不解锁 + 9008 三件套（`boot_a` + `super_5/system_dlkm` + `vbmeta_a`）。
+### 4.1 目标与硬约束
 
-**当前状态**：**二阶段三件套已刷入并过二屏**（§5.17–5.18）；`max_loop=64` 与全量 GKI 推荐 defconfig 已实机验证。**sparse 容器安装仍失败**（§5.18）——根因已从「缺 loop」修正为「APEX 占槽 + App `mount -o loop` 自动 losetup 失败」；**目录模式**安装容器为当前可行路径。
+| 项 | 现状 |
+|----|------|
+| 设备 | TB520FU / Yoga Tab Plus，SM8650（pineapple/lapis） |
+| 系统 | ROW ZUI 17.5.10.096，**Android 16**（SDK 36），slot `_a`，BL **locked** |
+| Root | SukiSU on `init_boot_a` |
+| 存储 | **无 SD 卡槽**；容器数据在 `/data` f2fs |
+| 核心诉求 | 在不解锁、不裸刷 Debian 的前提下，把 Droidspaces 当日常 Linux 开发环境用稳 |
 
-短期路线：
+### 4.2 已验证基线
 
-1. Droidspaces 用 **目录模式**装 Debian（不要用 sparse/image 模式）。
-2. 容器跑通后再考虑：phase-3 `max_loop=128` 实验，或向 Droidspaces 上游提 issue（App 应改用 CLI 的 `ioctl loop_attach`，见 §5.18）。
-3. 继续用 9008 最小 rawprogram；不要只刷 boot；不要刷 `init_boot_a`（SukiSU）。
-4. 保留 `rollback_triplet.cmd`；vbmeta 回滚用 live SukiSU 65536B 版本。
-5. GitHub 开源仓库：`D:\project\tb520fu-droidspaces-gki\`（脚本 + 文档，镜像走 Release 另传）。
+**内核 / 刷机（不要再重复）**
+
+- **9008 四镜像**（`init_boot` SukiSU + `boot_a` + `super_5` + `vbmeta`）→ `boot_completed=1`，`verifiedbootstate=green`
+- **boot 与 system_dlkm 必须成套**；只刷 boot 会二屏卡死（§5.10–5.11）
+- phase-2：`max_loop=64` + Droidspaces kABI patch；`droidspaces check` 通过
+- 低价值动作见 §0
+
+**容器（有已知短板）**
+
+| 容器 | 网络 | 安装方式 | 用途 |
+|------|------|----------|------|
+| `debian13` | host | 目录 `rootfs/` | anland/KDE/GPU 实验，**暂搁置主攻** |
+| `debian-cli` | NAT `172.28.1.2` | 目录 `rootfs/` | **CLI 开发主战场** |
+
+- NetProxy + `ds-br0` bypass 已联调（§5.20）
+- Turnip GPU ~95 FPS（`debian13`）
+- **App sparse 安装仍失败**（§5.18–5.19）；**目录模式 I/O 卡**为当前最大体感短板
+
+### 4.3 路线优先级
+
+```text
+日常开发     → debian-cli + NAT + NetProxy bypass
+磁盘 I/O 卡  → 【当前主攻】稀疏挂载调研与实机 A/B（§5.21）
+             → 并行：tmpfs 扛 apt/编译热点（无 SD 槽的务实手段）
+想刷内核     → 只走 9008 成套；保留 rollback
+裸机 Linux   → 长期探索；ROM/DTS 已提取（agent-tools/rom-dtb-extract/）
+换平板       → 优先有 SD 槽或 USB4；容器可 ext4 块设备直通
+```
+
+### 4.4 战线 A — 当前主攻（短期）
+
+1. **`debian-cli` 开发链**（§5.20）：mask `systemd-networkd`；EasyTier + 容器内代理；`grok` CLI；重启后自动 start
+2. **I/O 缓解（并行）**：tmpfs 挂 apt 缓存与编译目录；关 Baloo/PackageKit；可选 USB-C OTG ext4 bind `~/projects`
+3. **稀疏挂载**（§5.21）：社区调研 ✅；待实机 A/B
+
+### 4.5 战线 B — 中期（同机优化）
+
+- sparse/CLI 挂载或 `~/projects` 独立 ext4 镜像
+- 向 Droidspaces-OSS 提 issue（App `mount -o loop` vs CLI `ioctl(LOOP_CTL_GET_FREE)`）
+- phase-3 `max_loop=128`：**低优先级**
+
+### 4.6 战线 C — 长期探索
+
+| 路线 | 可行性摘要 |
+|------|------------|
+| 裸机主线 Debian / postmarketOS | 无 TB520FU 现成移植；瓶颈在 lapis-qrd DTS + 外设 |
+| Halium 式 | 比裸机易、比容器难 |
+| 内核二屏/audio 旧主线 | 已降级为存档（§5.10–5.11） |
+
+### 4.7 刷机与发布
+
+1. 9008 最小 rawprogram；**不要只刷 boot**；日常**不要刷** `init_boot_a` 除非换 root
+2. 保留 `rollback_triplet.cmd`；vbmeta 用 live SukiSU 65536B
+3. 仓库 `D:\project\tb520fu-droidspaces-gki\`；镜像走 Release
+
+### 4.8 待办清单
+
+| 优先级 | 项 | 状态 |
+|--------|-----|------|
+| **P0** | 稀疏挂载社区调研（§5.21 第一步） | ✅ 2026-06-20 |
+| **P0** | 稀疏挂载实机 A/B（§5.21 第二步） | ✅ 2026-06-20（apt −69%；CLI `--rootfs-img` 仍失败） |
+| **P1** | `debian-cli` tmpfs 启动脚本 | 待做 |
+| **P1** | mask `systemd-networkd`、重启自动 start | 待做 |
+| **P1** | EasyTier + Gitea；`grok` CLI | 待做 |
+| **P2** | `debian-cli` 启动前手动 losetup 日常化脚本 | 待做（A/B 已证实 apt 收益） |
+| **P3** | lapis-qrd DTS 移植清单 | 长期 |
 
 ---
 
@@ -1290,3 +1359,443 @@ Failed to mount sparse image. Your kernel might not support loop mounts here.
 1. **目录模式**安装容器（推荐，已验证内核配置满足 `droidspaces check`）。
 2. 可选 phase-3：`max_loop=128`（不保证修复 App 安装路径）。
 3. 刷机包放 GitHub **Release** 大文件；仓库只放脚本与文档（见 `D:\project\tb520fu-droidspaces-gki\`）。
+
+### 5.19 2026-06-18：排除 magic_mount_rs + adb 复现 loop 挂载
+
+#### 背景
+
+维护者怀疑 KernelSU metamodule [magic_mount_rs](https://github.com/KernelSU-Modules-Repo/magic_mount_rs) 配置不当导致 Droidspaces sparse 安装失败。对模块源码与实机配置做了只读排查，**未修改任何设备设置**。
+
+#### magic_mount_rs 结论：**已排除**
+
+| 检查项 | 实机结果 |
+|--------|----------|
+| `/data/adb/magic_mount/config.toml` | 默认：`mountsource=KSU`，`umount=false`，`partitions=[]` |
+| `meta-mm show-config` | `customMounts=[]`，`ignoreList=[]`，`umount=false` |
+| `/data/adb/magic_mount/custom` | 不存在 |
+| 模块状态 | `magic_mount_rs v4.0.2-747`，已启用，无 `disable` |
+| mount 表 | 无 `/data/local/Droidspaces`、`/mnt/Droidspaces` 相关条目 |
+
+模块开源部分仅使用 **tmpfs + bind mount + mount_move + symlink**，操作范围限于 `/system`/`/vendor`/`/product`/`/system_ext` 等系统分区树，**不使用 loop 设备**，默认不触碰 `/data`。
+
+同机其它 KSU 模块（`droidspaces` daemon、`netproxy`、Scene systemless、Zygisk/LSPosed 等）中，仅 Scene 两个模块带空 `system/` 骨架；`droidspaces` 模块为 daemon/sepolicy，不 overlay system。
+
+#### adb 烟雾测试（TB520FU，phase-2 已刷入）
+
+诊断脚本：`tools/diag_magic_mount_readonly.sh`（只读为主，末尾 64M 临时镜像测完即删）。
+
+| 项 | 结果 |
+|----|------|
+| `max_loop` | 64 |
+| losetup 已绑定 | 47（APEX 等） |
+| 空闲 loop | ~17（loop48+ 可用） |
+| `mount -t ext4 -o loop,rw` | **失败**：`losetup: Too many open files` |
+| 显式 `losetup /dev/block/loop48` + `mount` | **成功** |
+| `ulimit -n` | 32768 |
+
+与 §5.18 一致：**不是 loop 池满，是 `mount -o loop` 自动 losetup 路径不可靠**。
+
+#### 当前容器状态（目录模式）
+
+| 容器 | `use_sparse_image` | 说明 |
+|------|-------------------|------|
+| `debian13` | 0 | 目录 `rootfs/` |
+| `debian-cli` | 0 | 目录 `rootfs/` |
+
+`/data/local/Droidspaces` 下无 `.img` 文件；sparse 安装尚未在本机成功落盘。
+
+#### 排除 mmrs 后的剩余方向（优先级）
+
+1. **Droidspaces App 安装器**（最高）：App 用 `busybox mount -o loop`，CLI 用 `ioctl(LOOP_CTL_GET_FREE)`；应向 [Droidspaces-OSS](https://github.com/ravindu644/Droidspaces-OSS) 提 issue，附本表数据。
+2. **SELinux context**：安装时 `.img` 是否自动 `chcon u:object_r:vold_data_file:s0`（上游 Troubleshooting 有记录）；抓安装瞬间 `dmesg | grep avc`。
+3. **`mount -o loop` 机制**：对比 `/data/local/Droidspaces/bin/busybox mount` vs toybox；可选 `strace` losetup 看 fd 耗尽点。
+4. **sparse 镜像本身**：小镜像 vs 4GB 对比；`e2fsck -n` / 下载完整性。
+5. **其它 KSU 模块 A/B**：低概率；禁用非必需模块后重试 sparse（预期仍失败，用于封口）。
+6. **phase-3 `max_loop=128`**：仅当前几项无果时再试；§5.18 已表明不保证修 App 路径。
+7. **规避**：继续目录模式（已验证可用）。
+
+#### 建议下一步（只读诊断）
+
+下次在 App 内触发 sparse 安装失败时，抓取：
+
+```bash
+# App 安装日志 + 内核拒绝
+adb logcat -d | grep -iE 'SPARSE|droidspaces|losetup|loop'
+adb shell su -c "dmesg | grep -i avc | tail -30"
+adb shell su -c "ls -laZ /data/local/Droidspaces/Containers/*/rootfs.img 2>/dev/null"
+```
+
+可选 A/B：`touch /data/adb/modules/magic_mount_rs/disable && reboot` 后再试 sparse（预期仍失败，彻底排除 mmrs）。
+
+### 5.20 2026-06-18：NetProxy-Magisk + Droidspaces NAT + CLI 开发环境
+
+#### 背景与方向调整
+
+| 项 | 说明 |
+|----|------|
+| 宿主透明代理 | [NetProxy-Magisk](https://github.com/Fanju6/NetProxy-Magisk)（sing-box + TPROXY/REDIRECT），**不是** Mihomo 桌面版 TUN |
+| 旧问题 | `debian13`（`net_mode=host`）DNS 被劫持到 fake-ip `198.18.x.x`，`apt`/解析异常 |
+| GUI 路径 | anland + KDE 曾跑通，触摸板映射不如 Termux:X11，**暂搁置** |
+| 当前主攻 | `debian-cli`（NAT）+ 容器内 EasyTier / 显式代理 + `grok` CLI |
+
+#### NetProxy 与 Droidspaces 的配合（非 Mihomo `exclude-interface`）
+
+透明代理由 `tproxy.sh` + `tproxy.conf` 驱动，关键字段：
+
+| 字段 | 作用 |
+|------|------|
+| `OTHER_BYPASS_INTERFACES="ds-br0"` | **最关键**：进出 `ds-br0` 的流量不走透明代理/DNS 劫持 |
+| `BYPASS_IPv4_LIST` | 默认已含 `172.16.0.0/12`（覆盖 `172.28.0.0/16`）；可显式追加 `172.28.0.0/16` |
+| `DNS_HIJACK_ENABLE=1` | 宿主 wlan0 流量 DNS 走 sing-box fake-ip |
+
+配置文件路径：
+
+```text
+/data/adb/modules/netproxy/config/tproxy/tproxy.conf
+```
+
+**不要用** Mihomo 的 `exclude-interface: docker0` 思路；NetProxy 对应的是 **`OTHER_BYPASS_INTERFACES` + `BYPASS_IPv4_LIST`** 两层。
+
+服务应用 bypass 后，须在 **KernelSU Ultra / NetProxy 管理器** 中正常开启模块并重启（勿仅用 `cli service start` 绕过 UI 状态）。改 `tproxy.conf` 后可：
+
+```sh
+su -c /data/adb/modules/netproxy/scripts/cli tproxy reload
+# 或 service restart
+```
+
+#### 实机验证（2026-06-18，TB520FU，NetProxy 模块自启 + 重启后）
+
+| 环境 | github.com 解析 | 说明 |
+|------|-----------------|------|
+| 宿主 Android | `198.18.0.16` | fake-ip，透明代理正常 |
+| `debian-cli` 容器 | `140.82.116.x` | 真实 IP，bypass 生效 |
+
+其它确认项：
+
+- `ds-br0` = `172.28.0.1/16`；容器 `debian-cli` = `172.28.1.2/16`
+- `iptables -t mangle -L BYPASS_INTERFACE` 含 `ACCEPT ... ds-br0`
+- 容器 `resolv.conf`：`1.1.1.1` / `8.8.8.8`（非 `198.18.x.x`）
+- `ping 1.1.1.1`、域名解析在容器内正常
+
+#### 容器分工
+
+| 容器 | `net_mode` | 用途 |
+|------|------------|------|
+| `debian13` | `host` | anland/KDE/Termux:X11 实验，**会被** NetProxy 完整接管 |
+| `debian-cli` | `nat` | CLI 开发（`grok`、git、EasyTier）；**绕过**宿主透明代理 |
+
+NAT 容器内**不能**使用宿主 `127.0.0.1:1536` 作代理（网络命名空间隔离）；须容器内自建 EasyTier + sing-box mixed/socks，或走局域网 IP。
+
+`debian-cli` 默认 `run_at_boot=0`，重启平板后需手动 `droidspaces --name=debian-cli start`。
+
+#### 仓库脚本（`tools/`）
+
+| 脚本 | 用途 |
+|------|------|
+| `netproxy_bypass_droidspaces.sh` | 写入 `OTHER_BYPASS_INTERFACES=ds-br0` + `172.28.0.0/16`，`tproxy reload` |
+| `setup_debian_cli_nat.sh` | 从 `debian13` 克隆 rootfs 并 `start` NAT 容器（已存在则跳过克隆） |
+| `diag_netproxy_droidspaces.sh` | 诊断 NetProxy 状态、桥、容器 DNS |
+| `post_reboot_check.sh` | 重启后一键：NetProxy 状态 + 启动 `debian-cli` + DNS 对比 |
+| `test_debian_cli_net.sh` / `test_host_vs_container_dns.sh` | 容器/宿主 DNS 烟雾测试 |
+
+ADB 推送示例（维护者端口 `5041`）：
+
+```powershell
+$env:ANDROID_ADB_SERVER_PORT=5041
+adb push tools/netproxy_bypass_droidspaces.sh /data/local/tmp/
+adb shell su -c "sh /data/local/tmp/netproxy_bypass_droidspaces.sh"
+adb push tools/post_reboot_check.sh /data/local/tmp/
+adb shell su -c "sh /data/local/tmp/post_reboot_check.sh"
+```
+
+#### Droidspaces 内置终端：虚拟键无法隐藏（v6.3.0）
+
+App **设置页无**「隐藏虚拟键 / Extra Keys」开关。内置终端（Panel → Details → Terminal）在源码 [`ContainerTerminalScreen.kt`](https://github.com/ravindu644/Droidspaces-OSS/blob/main/Android/app/src/main/java/com/droidspaces/app/ui/screen/ContainerTerminalScreen.kt) 中**写死** `VirtualKeysView`，固定 **64dp 两排**：
+
+```text
+上排: ESC / - HOME UP END PGUP
+下排: TAB CTRL ALT LEFT DOWN RIGHT PGDN
+```
+
+**规避**（官方文档亦支持）：
+
+1. Panel → 容器 Details → 选用户 → **Copy Login**
+2. 在 **Termux**（或 ADB shell）粘贴执行
+3. Termux 隐藏自己的 extra keys：`~/.termux/termux.properties` 设 `extra-keys = []`
+
+可向 [Droidspaces-OSS Issues](https://github.com/ravindu644/Droidspaces-OSS/issues) 提 feature request：设置项或终端内折叠按钮。
+
+#### 待办（容器内，维护者未提供参数）
+
+1. `debian-cli` 内 mask `systemd-networkd`（避免覆盖 `container.config` 的 `dns_servers`）
+2. EasyTier 组网 + 容器内 sing-box 显式代理（无 TUN）→ 家里 SOCKS5 访问 Gitea
+3. 安装 `grok` CLI（`linux-aarch64`）；`XAI_API_KEY` 或 `grok login --device-auth`
+4. 可选：`--port 2222:22` + `adb forward tcp:2222 tcp:2222` SSH 进容器
+
+### 5.21 2026-06-20：稀疏挂载研究（社区调研 + 两步计划）
+
+#### 背景
+
+目录模式 `rootfs/` 直接铺在 `/data` f2fs 上，Debian 海量小文件导致元数据 I/O（`stat`/`readdir`/`apt`/`git`）体感卡顿。设备**无 SD 卡槽**（`lapis-qrd.dts` 仅有 `sd_card_det` 参考设计脚，零售机未引出）。上游官方推荐 Android 上使用 **Sparse Image**，但 TB520FU App 安装路径失败（§5.18–5.19）。
+
+**研究分两步：**
+
+1. **社区调研**：sparse vs 目录模式到底提升多少？有无实机 benchmark？→ 本节记录结论
+2. **实机方案**（条件触发）：若调研显示收益明确，或社区无定量数据 → 在 TB520FU 上用 CLI/手动 `losetup` 做 A/B，再决定挂载实现 → 见「第二步计划」
+
+#### 第一步：社区调研结论（2026-06-20）
+
+**检索范围**：Droidspaces 官方文档、Troubleshooting、GitHub Issues/PR、Reddit/XDA 用户帖、通用 loopback 性能讨论。  
+**结论：无公开定量 benchmark**（无 apt/git/stat 的 sparse vs directory 对比数据）。
+
+##### 上游官方立场（定性，无数字）
+
+[Installation-Android.md](https://github.com/ravindu644/Droidspaces-OSS/blob/main/Documentation/Installation-Android.md) 配置向导明确写：
+
+> **Container Type**: We recommend **Sparse Image** for better **performance and stability** on Android's **f2fs** storage, as well as to prevent weird **SELinux/Keyring** issues.
+
+即官方推荐理由是 **f2fs 上的性能与稳定性 + SELinux/Keyring**，不是「比 UFS 更快」。
+
+##### Troubleshooting 中与目录模式对比的要点
+
+| 主题 | 目录模式 | sparse / `rootfs.img` |
+|------|----------|------------------------|
+| SELinux 导致 rootfs 损坏（symlink/库路径异常） | **易发生**（每个文件暴露给宿主 SELinux） | **推荐 img**（xattr 封装在 ext4 镜像内） |
+| FBE `ENOKEY` / Keyring | 可能出问题 | **推荐 img** 隔离 |
+| `--volatile` + OverlayFS | f2fs 上 **失败** | ext4 镜像作 lower **可用** |
+| 镜像 I/O 被 SELinux 拒 | — | v4.3.0+ 自动 `chcon vold_data_file`（与 §5.19 一致） |
+| 空间回收 | 删文件即释放 f2fs | 需容器内 `fstrim -av` 才能让 sparse 缩洞（[Issue #81](https://github.com/ravindu644/Droidspaces-OSS/issues/81)） |
+
+##### 社区 / Issue 板（无性能数据，有场景共识）
+
+| 来源 | 要点 |
+|------|------|
+| [Issue #81](https://github.com/ravindu644/Droidspaces-OSS/issues/81) | 用户明确称 sparse「more isolated, stable & compatible」；关注删包后镜像不缩小 |
+| [Issue #179](https://github.com/ravindu644/Droidspaces-OSS/issues/179) | 外置 SD/ext4 存容器为 **feature request**，尚无官方方案；与 TB520FU 无卡槽痛点同类 |
+| [Issue #66](https://github.com/ravindu644/Droidspaces-OSS/issues/66) | sparse → 目录转换需求（说明两种模式并存） |
+| [PR #207](https://github.com/ravindu644/Droidspaces-OSS/pull/207) | TB520FU 列为 **Partial**：directory 可用，**App sparse 未解决** |
+| Reddit S10/S20FE Droidspaces 帖 | 部署经验分享，**未提及** sparse vs 目录 I/O 对比 |
+| droidspaces.org 对比表 | Droidspaces vs PRoot/Chroot 强调 namespace **Native**；**未**单独量化 loop 开销 |
+
+##### 与「loop 一定更慢」的通用说法如何调和
+
+- 宿主 f2fs 直接承载百万小文件时，瓶颈常在 **f2fs 元数据 / NAT / GC**，不是顺序带宽。
+- sparse 把海量 inode **收进单个 ext4 镜像**，宿主 f2fs 只见一个大文件 + 镜像内 ext4 元数据——与官方「f2fs 上更优」的叙述一致。
+- 通用 Linux 经验：loopback **多一层**，顺序读写可能略差；**不能**从社区文献推出「sparse 一定更快」，只能推出「官方与用户认为在 Android f2fs 上更值得用」，且 **稳定性收益有文档支撑**。
+
+##### 第一步小结（是否进入第二步）
+
+| 判断项 | 结果 |
+|--------|------|
+| 有无可信定量提升数据？ | **无** |
+| 官方是否推荐 sparse？ | **是**（performance + stability on f2fs） |
+| 稳定性/SELinux 收益？ | **有文档与 issue 共识** |
+| TB520FU 特有问题？ | App `mount -o loop` 失败；CLI/显式 `losetup` 可挂载（§5.19） |
+
+**决策**：满足「提升不错 **或** 没有相关信息」→ **进入第二步**（实机 A/B + 挂载方案），不因缺乏 benchmark 而放弃。
+
+#### 第二步计划（待实机执行）
+
+**目标**：在 `debian-cli`（或克隆副本）上对比目录模式 vs sparse 的体感与可量化指标。
+
+**挂载路径**（绕过 App 安装器）：
+
+1. **优先**：`droidspaces --rootfs-img=/path/to/rootfs.img`（CLI `ioctl(LOOP_CTL_GET_FREE)`，§5.18）
+2. **备选**：目录模式装好后，手动 `losetup /dev/block/loopN` + `mount` + 改 `container.config`
+3. **局部试验**：仅 `~/projects` 用独立 ext4 镜像 bind，不动整盘 rootfs
+
+**Benchmark 脚本**（仓库已有，可扩展）：
+
+- `tools/diag_stat_compare.sh` — `stat` 延迟
+- `tools/diag_file_io.sh` / `diag_file_io2.sh` — `readdir`/`find`/文件计数
+- 建议增补：`apt update` 耗时、`git status`（中等仓库）、`du` 冷缓存
+
+**成功标准（草案）**：
+
+- `stat x500`、`find /usr/share`、apt 元数据操作 **明显改善**（例如 >30%），或
+- 即使数值提升有限，但 **SELinux/稳定性** 问题消失且无明显倒退 → 将 `debian-cli` 迁为 sparse 日常配置
+
+**并行缓解（无卡槽）**：tmpfs 挂 apt 缓存与编译目录（§4.4），与 sparse 试验不互斥。
+
+**上游跟进**：实机数据齐全后，向 [Droidspaces-OSS Issues](https://github.com/ravindu644/Droidspaces-OSS/issues) 提交 TB520FU loop 挂载差异 + 可选 benchmark 附件。
+
+#### 第二步：TB520FU 实机 A/B（2026-06-20，谨慎执行）
+
+**环境**：ROW ZUI 17.5.10.096；phase-2 `max_loop=64`；loop 已绑定 47（APEX）；`debian-cli` rootfs 1.8G；测试镜像 `debian-cli-sparse-test/rootfs.img` 3G sparse ext4（自 `debian-cli` tar 克隆）。
+
+**挂载路径实测**
+
+| 方式 | 结果 |
+|------|------|
+| App `mount -o loop` | 仍失败（§5.19，未重测） |
+| CLI `--rootfs-img=...` | **失败**：`LOOP_SET_FD: Resource busy`（3 次重试后放弃） |
+| 手动 `losetup loop48` + `mount` + **目录模式** `--rootfs=<挂载点>` | **成功**（I/O 层与 sparse 等价：容器根为 loop 上 ext4） |
+
+> `losetup` 对 3G 镜像常报 `> 64 bytes`，但 `mount /dev/block/loop48` 仍可成功；**勿**在 APEX 活跃时 `losetup -d` 非测试 loop。
+
+**A/B 数据**（同一份 rootfs 内容；`debian-cli` NAT；单次运行）
+
+| 指标 | 目录模式（f2fs `/data`） | sparse（loop48 ext4） | 变化 |
+|------|--------------------------|------------------------|------|
+| `stat` ×500 `/etc/passwd` | 2197 ms | 2172 ms | ≈ 持平 |
+| `ls -1 /usr/share` | 15 ms | 16 ms | ≈ 持平 |
+| `find /usr/share -maxdepth 2` | 27 ms | 43 ms | sparse 略慢 |
+| `find /root -maxdepth 2` | 7 ms | 8 ms | ≈ 持平 |
+| **`apt-get update -qq`** | **14588 ms** | **4490 ms** | **约 −69%（明显变快）** |
+
+**解读**
+
+- **最大收益在 apt 类元数据+I/O**（`/var/lib/apt` 大量小文件），与上游「f2fs 上 sparse 更合适」一致。
+- 单次 `stat`/`readdir` 微基准 **看不出差距**；个别 `find` 项 sparse 略慢，可能受冷缓存/单层 loop 影响。
+- TB520FU 上 **`droidspaces --rootfs-img` 与 App 安装器同属 loop 挂载族**，均不可靠；**可行变通**是启动前手动 `losetup`+`mount`，再用目录模式指向挂载点。
+
+**仓库脚本**（`tools/`，已推送实机 `/data/local/tmp/`）
+
+| 脚本 | 用途 |
+|------|------|
+| `sparse_ab_phase0_check.sh` | 只读环境 + loop 烟雾测试 |
+| `sparse_ab_create_img.sh` / `sparse_ab_fill_img.sh` | 从 `debian-cli` 生成测试 `rootfs.img` |
+| `sparse_ab_run.sh` | 自动 A/B（sparse 腿 CLI 挂载失败时改用 `sparse_ab_manual_mount.sh`） |
+| `sparse_ab_manual_mount.sh` | **当前可行**的 sparse 等价挂载 + benchmark |
+| `sparse_ab_cleanup_loops.sh` | 清理测试 loop 48–63 |
+
+**后续（P1）**
+
+1. 若日常迁移 sparse：为 `debian-cli` 写 **启动前挂载** 脚本（显式 `loop48`+`mount`，停容器后 `umount`+`losetup -d`），或等上游修 `LOOP_SET_FD`。
+2. 复测 2–3 轮 `apt update` 取中位数；补 `git status` 基准。
+3. 并行：`tmpfs` 挂 `/var/cache/apt/archives` 看能否在目录模式下逼近 sparse 收益。
+4. 向上游 issue：TB520FU 上 `mount -o loop` **与** CLI `--rootfs-img`（`LOOP_SET_FD: Resource busy`）双失败 + 本表 benchmark。
+
+**测试残留**：`/data/local/Droidspaces/Containers/debian-cli-sparse-test/`（`rootfs.img` ~1.9G 实占 + 空 `rootfs/` 挂载点目录）；**未改动** `debian-cli` / `debian13` 生产 rootfs。测试后两容器均为 **stopped**。
+
+#### 模块隔离实验（2026-06-21，已恢复全部模块）
+
+**保留启用**：`droidspaces`（Daemon）、`zygisksu`、`zygisk-sui`（root 栈）。  
+**曾批量禁用后重启**：RescueBrick、magic_mount_rs、netproxy、scene_*、virtual-drm-daemon、zygisk_lsposed。
+
+| 阶段 | `mount -o loop` | CLI `--rootfs-img` | 说明 |
+|------|-----------------|---------------------|------|
+| 批量禁用 + 重启 | **SUCCESS** | **SUCCESS** | 与 §5.19「必失败」不同 |
+| 全部恢复 + 重启 | **SUCCESS** | **SUCCESS** | 模块不是永久致因 |
+| 单独只开 magic_mount_rs | SUCCESS | SUCCESS | 排除 mmrs 单点 |
+| 单独只开 netproxy / LSPosed / virtual-drm-daemon | SUCCESS | SUCCESS | 同上 |
+| 故意泄漏 loop48 不清理 | SUCCESS | SUCCESS | 未复现 `LOOP_SET_FD` |
+
+**结论（修正 §5.18–5.19 的「永久坏了」表述）**
+
+1. **不是某一个 KSU 模块长期弄坏 loop**（逐一开机复测均通过）；magic_mount_rs **再次排除**。
+2. **不是平板硬件故障**；干净重启后三条挂载路径均可成功。
+3. 此前 A/B 时的 `Too many open files` / `LOOP_SET_FD: Resource busy` 更符合 **loop 池瞬时脏状态**（测试期间手动 losetup/失败重试残留、APEX 占 47/64 槽位边际紧张），**完整重启可清零**。
+4. **自编 GKI / phase-2 内核** 与失败无因果关系；失败出现在运行态而非缺 loop 配置。
+5. 实验结束后 **已全部 `restore` + 重启**；10 个模块均为 **ENABLED**。
+
+脚本：`tools/sparse_ab_module_isolate.sh`、`sparse_ab_bisect_run.sh`。
+
+### 5.22 2026-06-21：跨机型 busybox + SELinux 证伪（前置检查收尾）
+
+专档：[`docs/SPARSE-MOUNT-RESEARCH.md`](SPARSE-MOUNT-RESEARCH.md) §5.5–§5.6、§12；issue 草稿：[`docs/UPSTREAM-ISSUE-DRAFT.md`](UPSTREAM-ISSUE-DRAFT.md)。
+
+#### 跨机型 Droidspaces v6.3.0 **自带 busybox**（方案 A，原厂系统）
+
+| 设备 | busybox `mount -o loop` | toybox | 备注 |
+|------|-------------------------|--------|------|
+| TB520FU phase-2 | ❌ `can't setup loop device` | ✅ 重启后 | 与 §5.19 一致 |
+| 小米 12S Ultra thor | ❌ **同上** | ✅ | 社区表**无** thor 内核；`check` 缺 PID/IPC ns |
+| 一加 Ace 5 Pro PKR110（原厂） | ❌ **同上** | ✅ | 缺 PID/IPC ns |
+| 一加 PKR110（`Gold_bug`） | ❌ 仍失败 | ✅ | ✅ check · **#9 10/10** stock CLI（线 2 ✅） |
+| Pixel 8 | — | ✅ 近满池 OK | 未装 DS（回锁麻烦） |
+
+**不是**联想独家；**不是** KSU 自带 busybox（小米上 `/data/adb/ksu/bin/busybox` 可成功，但 App 安装器不用该路径）。
+
+#### SELinux `setenforce 0` 证伪
+
+三台机（TB520FU / 小米 / 一加）permissive 下 **busybox 仍失败**，toybox 在一加/小米仍成功 → **勿归因为 SELinux enforcing**。
+
+脚本：`tools/sparse_selinux_loop_test.sh`；日志：`output/sparse-precheck/`。
+
+#### stock / loopfix 指纹（TB520FU）
+
+| 二进制 | 大小 | SHA256（前缀） |
+|--------|------|----------------|
+| stock | 461544 B | `3538a2b7…` |
+| loopfix | 410168 B | `e0a80f9c…3b5c4584d` |
+
+#### 仍待办（非阻塞 issue 正文）
+
+- **#9** stock CLI 脏池：PKR110 ✅（`Gold_bug`）；**thor** 仍待社区内核。
+- **魔改 APK** 跨机型（PKR110 等）⏳ 可选。
+- 社区表 TB520FU Partial 备注更新。
+- 上游提交：用户确认 git commit 后再 push；issue 草稿已齐。
+
+### 5.23 2026-06-21：魔改 APK（loop-scan 双补丁）TB520FU E2E
+
+专档：[`SPARSE-MOUNT-RESEARCH.md`](SPARSE-MOUNT-RESEARCH.md) §5.4.1。
+
+#### 背景
+
+§5.4 仅替换 `droidspaces` loopfix CLI **不能**修 App 新建 sparse（`SparseImageInstaller.kt` + `sparsemgr.sh` 仍走 busybox `mount -o loop`）。本仓库本地构建 debug APK，打入：
+
+| 补丁 | 作用 |
+|------|------|
+| `sparsemgr-loop-scan.patch` | migrate/resize 高 minor 扫描 |
+| `sparseimageinstaller-loop-scan.patch` | App 新建 sparse → `mount_loop_scan.sh`（**先 busybox loop，再 loop-scan fallback**） |
+
+构建前须 `build_droidspaces_loopfix.sh`，将 loopfix CLI 拷入 `assets/binaries/droidspaces-aarch64`（debug 包默认不含 CLI）。
+
+#### 产物与安装
+
+| 项 | 值 |
+|----|-----|
+| 脚本 | `tools/build_droidspaces_apk_loopfix.ps1` · `verify_apk_loopfix.ps1` |
+| APK | `output/droidspaces-apk-loopfix/Droidspaces-loopfix-debug.apk` |
+| 大小 / SHA256 | **23157618 B** · `E05CC7D3A7618587A000D390733A72D436C8A28E6BEF3F46A1840696678EDD9B`（`output/droidspaces-apk-loopfix/SHA256SUMS`） |
+| 安装 | 卸 stock App（`INSTALL_FAILED_UPDATE_INCOMPATIBLE`）；debug 签名；KSU root |
+| LF 门禁 | 构建前扫描 asset `*.sh` 禁止 CRLF（见 §5.24） |
+
+#### 实机结果（TB520FU HA2452JQ）— **现阶段正常 ✅**
+
+- 用户手装 4G sparse **`sb`**：`Installation completed successfully!`
+- 自动化：`post_apk_e2e_check.sh`（启停+网络+3× stop/start）**PASS**
+- 自动化：`full_apk_sparse_install_e2e.sh`（从零模拟 App 安装全流程）**PASS**
+- `droidspaces check` 全绿；CLI **410168 B** loopfix 持久化
+- 测试容器 **`sb`** / **`sb-e2e`** 已删；保留 **`debian-cli`**、**`debian13`**（均未运行）
+
+#### 与一加线 2 的关系
+
+一加 PKR110 已在 **stock APK** + `6.6.89-Gold_bug` 完成 #9 与 App 建 `test`（见 `ONEPLUS-PKR110-COMMUNITY-KERNEL-交接.md`）。**魔改 APK** 在一加/其他机型上 **尚未安装验证**（⏳ 可选后续）。
+
+### 5.24 2026-06-20 晚：CRLF + 安装器收尾 + 完整 E2E
+
+专档：[`SPARSE-MOUNT-RESEARCH.md`](SPARSE-MOUNT-RESEARCH.md) §5.4.2。
+
+#### 时间线（HA2452JQ）
+
+| 阶段 | 现象 | 结论 |
+|------|------|------|
+| 旧 APK 装 `sb2` | 日志停在 `[SPARSE] Unmounting sparse image...` 30+ min | `finally` 内 `sync`/umount 阻塞，**未写** `container.config`；镜像已装好 |
+| 首版新 APK 装 `sb` | 光速 `Failed to mount sparse image` | **`mount_loop_scan.sh` CRLF** → `set -eu` 即死，非 mount 策略问题 |
+| CRLF+Kotlin 修复后 | 完整日志至 `Installation completed successfully!` | busybox 失败后 **loop-scan fallback** 正常；先写 config 再 umount |
+| 启停验证 | `post_apk_e2e_check.sh` / `verify_sb_stopstart.sh` | ping/curl OK；3× stop/start OK |
+| **完整安装 E2E** | `full_apk_sparse_install_e2e.sh`（2026-06-20 晚复验） | mount 脚本 + 解压 + 先 config 再 umount + start + 3× stop/start **PASS** |
+
+#### 补丁栈（上游友好，base `76cbd21`）
+
+| 补丁 | 作用 |
+|------|------|
+| `droidspaces-android-loop-scan.patch` | CLI `mount.c` |
+| `sparsemgr-loop-scan.patch` | migrate/resize shell |
+| `sparseimageinstaller-loop-scan.patch` | App 挂载脚本 |
+| `sparseimageinstaller-unmount-after-config.patch` | 安装顺序修复 |
+
+刷新：`bash tools/apply_loopfix_vendor.sh`（WSL）
+
+#### Kotlin 改动要点（`SparseImageInstaller.kt`）
+
+- 成功路径：`extract()` 结束**不** umount → `ContainerInstaller` 写 config → `unmountSparseImage()`
+- 去掉 umount 前阻塞性 `sync`；`buildLoopDetachCmd` 用 `losetup -a`（勿依赖 `/proc/loops`）
+
+#### 接手注意
+
+- Windows 编辑 `assets/*.sh` 后必跑 `verify_apk_loopfix.ps1`（含 LF 扫描）或构建脚本 CRLF 门禁
+- `droidspaces show` 输出 Unicode 表格，`grep` 用 `grep -F sb`，勿写 `\| sb \|`
+- `losetup -d` 在 TB520FU 可能留幽灵绑定，不占磁盘；目录已删即可

@@ -1,0 +1,20 @@
+Starting start operation...
+Command: /data/local/Droidspaces/bin/droidspaces --config='/data/local/Droidspaces/Containers/debian-cli/container.config' start
+
+— Welcome to Droidspaces v6.3.0 ! —
+
+[+] Image checked and repaired successfully.
+[+] Mounting ext4 rootfs image /data/local/Droidspaces/Containers/debian-cli/rootfs.img on /mnt/Droidspaces/debian-cli...
+[+] Retrying in 1s...
+[-] LOOP_SET_FD: Resource busy
+[+] Mounting ext4 rootfs image /data/local/Droidspaces/Containers/debian-cli/rootfs.img on /mnt/Droidspaces/debian-cli (Attempt 2/3)...
+[-] LOOP_SET_FD: Resource busy
+[+] Retrying in 1s...
+[+] Mounting ext4 rootfs image /data/local/Droidspaces/Containers/debian-cli/rootfs.img on /mnt/Droidspaces/debian-cli (Attempt 3/3)...
+[-] LOOP_SET_FD: Resource busy
+[-] Failed to mount image /data/local/Droidspaces/Containers/debian-cli/rootfs.img after 3 attempts
+[!] [NET] cleanup: cannot derive veth name - no valid PID
+
+Command failed (exit code: 255)
+
+操作失敗！

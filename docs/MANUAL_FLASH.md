@@ -102,15 +102,21 @@ adb shell su -c droidspaces check
 
 ---
 
-## 6. 已知未解决：sparse 容器安装
+## 6. 稀疏挂载：stock App 有问题；魔改 APK + CLI 可用
 
-本项目在 TB520FU（维护者 ROW 国际版）上**尚未解决** Droidspaces App 用 **sparse/rootfs.img** 安装容器失败的问题。
+**stock APK** 的 busybox `mount -o loop` 在 TB520FU、小米、一加均失败（**非** SELinux、**非** 联想独家）。仅换 loopfix CLI **不修** stock App 安装器。本仓库 **魔改 APK** 在 **联想 TB520FU 现阶段正常**：手装 sparse + `post_apk_e2e_check.sh` + `full_apk_sparse_install_e2e.sh` **均已验 ✅**（§5.4.1–§5.4.2；资产须 LF-only）。**一加线 2**（`Gold_bug` + stock CLI #9 10/10）**已完成**；魔改 APK 跨机型 ⏳。见 `ONEPLUS-PKR110-COMMUNITY-KERNEL-交接.md`。
 
-- `droidspaces check` 可通过
-- phase-2 `max_loop=64` 已验证刷入，sparse 安装**仍失败**
-- 原因我们还没完全弄清（loop 占用、App 挂载实现等）
+**本机现状（2026-06-21）**
 
-**请用目录模式安装容器，不要用 sparse/image 模式。**
+- `droidspaces check` ✅；phase-2 `max_loop=64` 已刷入
+- `debian-cli` 已迁 **32G sparse** + **loopfix**（`apt update` 约 −69%）
+- 魔改 APK：`droidspaces check` 全绿，后端 loopfix 410168 B
+
+**新建容器**：**魔改 APK**、CLI + `migrate_debian_cli_sparse.sh`，或目录模式；**勿**用 Play/GitHub 版 App Sparse 新建。stock App 升级可能覆盖 CLI → `apply-loopfix.sh`。
+
+专档：[`SPARSE-MOUNT-RESEARCH.md`](SPARSE-MOUNT-RESEARCH.md)；上游草稿：[`UPSTREAM-ISSUE-DRAFT.md`](UPSTREAM-ISSUE-DRAFT.md)；交接 §5.21–§5.22。
+
+诊断：`sparse_cli_app_compare.sh`、`sparse_oem_loop_smoke.sh`、`sparse_selinux_loop_test.sh`
 
 ---
 
