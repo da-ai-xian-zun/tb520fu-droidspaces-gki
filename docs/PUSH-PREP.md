@@ -45,37 +45,22 @@ git push origin main   # YOU run this — not automated
 
 ---
 
-## 2. Droidspaces-OSS fork (`vendor/Droidspaces-OSS`)
+## 2. Droidspaces-OSS fork (`vendor/Droidspaces-OSS`) — ✅ 已备好，待 push
 
-Current state (local): detached @ `76cbd21`, modified sources match `patches/`.
+详见 [`PUSH-PREP-DROIDSPACES.md`](PUSH-PREP-DROIDSPACES.md)。
 
-### One-time: point at your fork
+| 项 | 状态 |
+|----|------|
+| `fork` remote | ✅ |
+| 分支 `android/sparse-loop-scan` | ✅ 3 commits @ `76cbd21` |
+| 工作区 | ✅ clean |
 
-```bash
-cd vendor/Droidspaces-OSS
-git remote add fork https://github.com/da-ai-xian-zun/Droidspaces-OSS.git 2>/dev/null || true
-git fetch fork main
-```
-
-### Branch + commit (from clean `76cbd21` or apply patches)
-
-```bash
-git checkout -b android/sparse-loop-scan 76cbd21
-# if tree already edited in place:
-git add src/mount.c Android/app/src/main/assets/sparsemgr.sh \
-  Android/app/src/main/assets/mount_loop_scan.sh \
-  Android/app/src/main/java/com/droidspaces/app/util/SparseImageInstaller.kt \
-  Android/app/src/main/java/com/droidspaces/app/util/ContainerInstaller.kt
-git commit -m "mount: android loop attach via high-minor scan when GET_FREE fails"
-# squash or split per docs/UPSTREAM-ISSUE-PR-EN.md if preferred
-```
-
-### When ready (manual)
-
-```bash
+```powershell
+cd vendor\Droidspaces-OSS
 git push fork android/sparse-loop-scan
-# Open PR on GitHub: da-ai-xian-zun/Droidspaces-OSS → ravindu644/Droidspaces-OSS
 ```
+
+然后按 `UPSTREAM-ISSUE-PR-EN.md` 开 Issue → PR 到 `ravindu644/Droidspaces-OSS`。
 
 ---
 
