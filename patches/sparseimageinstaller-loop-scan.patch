@@ -1,0 +1,115 @@
+diff --git a/Android/app/src/main/java/com/droidspaces/app/util/SparseImageInstaller.kt b/Android/app/src/main/java/com/droidspaces/app/util/SparseImageInstaller.kt
+index 1e83ad0..e9309a4 100644
+--- a/Android/app/src/main/java/com/droidspaces/app/util/SparseImageInstaller.kt
++++ b/Android/app/src/main/java/com/droidspaces/app/util/SparseImageInstaller.kt
+@@ -76,55 +76,73 @@ object SparseImageInstaller {
+             logger.i("[SPARSE] Applying SELinux context (vold_data_file)...")
+             runRootCommand("chcon u:object_r:vold_data_file:s0 \"$imgPath\"", logger) ?: throw Exception("Failed to apply SELinux context to image")
+ 
+-            // 4. Mount Image (Minimal options for Max compatibility)
+-            logger.i("[SPARSE] Mounting sparse image (Minimal loop,rw)...")
+-            val mountOptions = "loop,rw,nodelalloc,noatime,nodiratime,init_itable=0"
+-            val mountCmd = "${Constants.BUSYBOX_BINARY_PATH} mount -t ext4 -o $mountOptions \"$imgPath\" \"$mountPoint\" || " +
+-                          "mount -t ext4 -o $mountOptions \"$imgPath\" \"$mountPoint\""
+-
++            // 4. Mount Image - upstream busybox mount -o loop first; loop-scan fallback on failure
++            logger.i("[SPARSE] Mounting sparse image (busybox loop,rw; loop-scan fallback)...")
++            val mountOptions = "rw,nodelalloc,noatime,nodiratime,init_itable=0"
++            val mountScript = prepareAssetScript(context, "mount_loop_scan.sh", logger)
++            val mountCmd = "BUSYBOX_PATH=${Constants.BUSYBOX_BINARY_PATH} \"${mountScript.absolutePath}\" \"$imgPath\" \"$mountPoint\" \"$mountOptions\""
+             runRootCommand(mountCmd, logger) ?: throw Exception("Failed to mount sparse image. Your kernel might not support loop mounts here.")
+ 
+-            try {
+-                // 5. Extract Tarball
+-                logger.i("[SPARSE] Extracting tarball to mount point...")
+-                val isXz = tarball.name.lowercase().endsWith(".xz")
+-                val extractCmd = if (isXz) {
+-                    "cd \"$mountPoint\" && ${Constants.BUSYBOX_BINARY_PATH} xzcat \"${tarball.absolutePath}\" | ${Constants.BUSYBOX_BINARY_PATH} tar -xpf - 2>&1"
+-                } else {
+-                    "cd \"$mountPoint\" && ${Constants.BUSYBOX_BINARY_PATH} tar -xzpf \"${tarball.absolutePath}\" 2>&1"
+-                }
+-
+-                // For extraction, we stream the output to the logger's debug level
+-                val extractResult = Shell.cmd(extractCmd).exec()
+-                if (!extractResult.isSuccess) {
+-                    throw Exception("Tarball extraction failed: ${extractResult.err.joinToString("\n")}")
+-                }
+-                logger.i("[SPARSE] Extraction completed successfully")
+-
+-                // 6. Apply Post-Extraction Fixes (using script as requested)
+-                applyScriptFixes(context, mountPoint, logger)
+-
+-            } finally {
+-                // 7. Unmount (Always attempt)
+-                logger.i("[SPARSE] Unmounting sparse image...")
+-                Shell.cmd("${Constants.BUSYBOX_BINARY_PATH} sync").exec()
+-                delay(1000)
+-
+-                val umountCmd = "${Constants.BUSYBOX_BINARY_PATH} umount -l \"$mountPoint\" || umount -l \"$mountPoint\""
+-                Shell.cmd(umountCmd).exec()
++            // 5. Extract Tarball (large xz rootfs may take 5-15 minutes)
++            logger.i("[SPARSE] Extracting tarball to mount point (may take 5-15 min for large images)...")
++            val isXz = tarball.name.lowercase().endsWith(".xz")
++            val extractCmd = if (isXz) {
++                "cd \"$mountPoint\" && ${Constants.BUSYBOX_BINARY_PATH} xzcat \"${tarball.absolutePath}\" | ${Constants.BUSYBOX_BINARY_PATH} tar -xpf - 2>&1"
++            } else {
++                "cd \"$mountPoint\" && ${Constants.BUSYBOX_BINARY_PATH} tar -xzpf \"${tarball.absolutePath}\" 2>&1"
++            }
+ 
+-                // Cleanup mount point directory
+-                Shell.cmd("rmdir \"$mountPoint\"").exec()
++            val extractResult = Shell.cmd(extractCmd).exec()
++            if (!extractResult.isSuccess) {
++                throw Exception("Tarball extraction failed: ${extractResult.err.joinToString("\n")}")
+             }
++            logger.i("[SPARSE] Extraction completed successfully")
++
++            // 6. Apply Post-Extraction Fixes (using script as requested)
++            applyScriptFixes(context, mountPoint, logger)
+ 
+         } catch (e: Exception) {
+             logger.e("[SPARSE] Error: ${e.message}")
+-            // Cleanup incomplete image on failure
++            unmountSparseImage(mountPoint, imgPath, logger)
+             Shell.cmd("rm -f \"$imgPath\"").exec()
+             throw e
+         }
+     }
+ 
++    /**
++     * Unmount sparse image after container.config is written (success path).
++     * Caller must invoke this; extract() leaves the mount active on success.
++     */
++    suspend fun unmountSparseImage(
++        mountPoint: String,
++        imgPath: String,
++        logger: ContainerLogger
++    ) = withContext(Dispatchers.IO) {
++        logger.i("[SPARSE] Unmounting sparse image...")
++        val umountCmd = "${Constants.BUSYBOX_BINARY_PATH} umount -l \"$mountPoint\" || umount -l \"$mountPoint\""
++        Shell.cmd(umountCmd).exec()
++        Shell.cmd(buildLoopDetachCmd(imgPath)).exec()
++        Shell.cmd("rmdir \"$mountPoint\"").exec()
++    }
++
++    private suspend fun prepareAssetScript(
++        context: Context,
++        assetName: String,
++        logger: ContainerLogger
++    ): File {
++        val out = File(context.cacheDir, assetName)
++        context.assets.open(assetName).use { input ->
++            FileOutputStream(out).use { output -> input.copyTo(output) }
++        }
++        Shell.cmd("chmod 755 \"${out.absolutePath}\"").exec()
++        logger.d("[SPARSE] Prepared $assetName at ${out.absolutePath}")
++        return out
++    }
++
++    private fun buildLoopDetachCmd(imgPath: String): String {
++        return "losetup -a 2>/dev/null | grep -F \"$imgPath\" | sed -n 's/:.*//p' | while read dev; do losetup -d \"\$dev\" 2>/dev/null; done"
++    }
++
+     /**
+      * Runs a root command and logs output. Returns result if successful, null otherwise.
+      */

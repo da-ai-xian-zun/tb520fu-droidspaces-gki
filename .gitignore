@@ -42,6 +42,53 @@ packages/*/rollback/*
 !packages/*/image/.gitkeep
 !packages/*/rollback/.gitkeep
 
+# APK / large release binaries (upload via GitHub Release only)
+release/*.apk
+
 # MCP / agent tooling (not part of project)
 mcps/
 terminals/
+agent-tools/
+
+# Local agent review scratch
+glm5.2*.txt
+
+# OnePlus kernel release binaries (ship via GitHub Release)
+release/oneplus-pkr110/
+
+# Anland / KDE desktop experiments (out of GKI+sparse scope)
+tools/anland-staging/
+tools/anland_*.sh
+tools/*anland*.sh
+tools/container_fix_*.sh
+tools/container_install_anland.sh
+tools/container_phase_a_*.sh
+tools/container_setup_kde*.sh
+tools/container_setup_mesa.sh
+tools/container_setup_user_debian.sh
+tools/check_anland*.sh
+tools/debug_start_kde.sh
+tools/de-start
+tools/finish_anland.sh
+tools/host_*anland*.sh
+tools/launch_anland_app.sh
+tools/run_container_anland*.sh
+tools/run_kde.sh
+tools/run_start_kde*.sh
+tools/run_weston_build_bg.sh
+tools/build_weston_only.sh
+tools/stage_anland_assets.sh
+tools/start_anland*.sh
+tools/status_anland.sh
+tools/tail_anland*.sh
+tools/sync_kde_scale.sh
+tools/fix_kscreen_scale.sh
+tools/check_kde*.sh
+tools/check_plasma_env.sh
+tools/.oneplus_*.sh
+
+# Local build artifacts (binaries ship via device deploy, not git)
+output/
+
+# Upstream vendor clone (patches/ are the canonical diff)
+vendor/
